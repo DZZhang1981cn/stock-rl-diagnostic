@@ -11,14 +11,53 @@ def curl(url):
     return json.loads(r.stdout)
 
 def financial(code):
+    """PE/PB/市值/EPS/每股收益率"""
     try:
         sym = 'sh'+code if code.startswith('6') else 'sz'+code
         r = subprocess.run(['curl', '-s', '-L', '--max-time', '8', '-H', 'User-Agent: Mozilla/5.0', f'http://qt.gtimg.cn/q={sym}'], capture_output=True, timeout=10)
         parts = r.stdout.decode('gbk', errors='replace').split('~')
         if len(parts) > 50:
-            return {'pe': parts[39] or '-', 'mcap': parts[45] or '-', 'pb': parts[46] or '-' if len(parts)>46 else '-'}
+            price = float(parts[3]) if parts[3] else 0
+            pe = parts[39] or '-'
+            pb = parts[46] or '-' if len(parts)>46 else '-'
+            mcap = parts[45] or '-'
+            # 每股收益率 = E/P = 1/PE (股票收益率)
+            try:
+                pe_val = float(pe)
+                eps_yield = (1/pe_val*100) if pe_val > 0 else 0
+                vs_alipay = eps_yield / 1.4  # 支付宝约1.4%
+            except:
+                eps_yield = 0; vs_alipay = 0
+            return {'pe':pe, 'pb':pb, 'mcap':mcap, 'eps_yield': eps_yield, 'vs_alipay': vs_alipay}
     except: pass
-    return {'pe': '-', 'mcap': '-', 'pb': '-'}
+    return {'pe': '-', 'pb': '-', 'mcap': '-', 'eps_yield': 0, 'vs_alipay': 0}
+
+def chip_proxy(h, l, c, v, i):
+    """筹码分布代理: 缩量天数/振幅收缩/窄幅区间"""
+    dry = 0
+    for j in range(i, max(0,i-20), -1):
+        if j>=2 and v[j] < sum(v[max(0,j-2):j+1])/3*0.85: dry+=1
+        else: break
+    amp5 = sum((h[j]-l[j])/c[j]*100 for j in range(max(0,i-4),i+1))/5
+    amp20 = sum((h[j]-l[j])/c[j]*100 for j in range(max(0,i-19),i+1))/20
+    amp_ratio = amp5/amp20 if amp20 else 1
+    h10 = max(h[max(0,i-9):i+1]); l10 = min(l[max(0,i-9):i+1])
+    range_pct = (h10-l10)/c[i]*100
+    score = dry*0.5 + (1 if amp_ratio<0.85 else 0)*2 + (1 if range_pct<8 else 0)*1
+    label = '集中' if score>=3 else ('分散' if score<1 else '中性')
+    return {'dry':dry, 'amp_ratio':amp_ratio, 'range':range_pct, 'score':score, 'label':label}
+
+# 板块指数
+SECTOR_MAP = {'能源':'sh000819','消费':'sh000989','医药':'sh000991','科技':'sh000993','金融':'sh000986'}
+STOCK_SECTOR = {
+    '601857':'能源','600028':'能源','601088':'能源','601225':'能源','601899':'能源','600019':'能源',
+    '600519':'消费','000858':'消费','000568':'消费','600809':'消费','600887':'消费','000333':'消费','000651':'消费','600690':'消费','002594':'消费','600660':'消费',
+    '600276':'医药','603259':'医药','600436':'医药','000538':'医药','300015':'医药','000661':'医药',
+    '002415':'科技','002230':'科技','002475':'科技','002241':'科技','601012':'科技','600406':'科技',
+    '601318':'金融','601628':'金融','600030':'金融','000776':'金融','600036':'金融','601398':'金融','601166':'金融',
+    '000002':'地产','600048':'地产','600031':'机械','601919':'航运','600585':'建材','600309':'化工',
+    '600029':'交通','601111':'交通','600900':'公用','601985':'公用','002714':'农牧','300750':'新能源',
+}
 
 def candlestick_svg(o, h, l, c, v, days, w=560, h_chart=200):
     n = len(o); ml=50; mr=10; mt=15; mb=35
@@ -112,9 +151,14 @@ for code, name in POOL:
         # K线数据 (30天)
         kf={'o':o[max(0,i-29):i+1],'h':h[max(0,i-29):i+1],'l':l[max(0,i-29):i+1],'c':c[max(0,i-29):i+1],'v':v[max(0,i-29):i+1],'days':days[max(0,i-29):i+1]}
         
+        # 筹码代理 + 板块
+        cp = chip_proxy(h,l,c,v,i)
+        sector = STOCK_SECTOR.get(code, '其他')
+        
         all_data.append({'code':code,'name':name,'price':c[i],'q_score':q_score,'o_score':o_score,
             'a5':a5,'a10':a10,'a20':a20,'vr':vr,'vola':vola,'beta':beta,
-            'trend':trend,'chg':ret(1)*100,'kf':kf,'fin':financial(code)})
+            'trend':trend,'chg':ret(1)*100,'kf':kf,'fin':financial(code),
+            'chip':cp,'sector':sector})
     except: pass
     time.sleep(0.03)
 
@@ -159,27 +203,30 @@ both = [r for r in qlib_rank if r['code'] in both_codes]
 
 if both:
     html += '<div class="card"><h2>🎯 双版共同推荐（最高置信度）</h2><table>'
-    html += '<tr><th>#</th><th>名称</th><th>代码</th><th>现价</th><th>Qlib得分</th><th>5F得分</th><th>α5</th><th>PE</th><th>PB</th><th>市值(亿)</th></tr>'
+    html += '<tr><th>#</th><th>名称</th><th>代码</th><th>现价</th><th>Qlib</th><th>5F</th><th>α5</th><th>PE</th><th>PB</th><th>收益率</th><th>vs支付宝</th><th>筹码</th><th>板块</th></tr>'
     for idx, r in enumerate(both):
         f = r['fin']; rc = 'r1' if idx<3 else 'r2'
+        ey = f['eps_yield']; va = f['vs_alipay']
         html += f'<tr><td><span class="rank {rc}">{idx+1}</span></td><td><b>{r["name"]}</b></td><td>{r["code"]}</td>'
         html += f'<td>¥{r["price"]:.2f}</td><td><b>{r["q_score"]:.0f}</b></td><td><b>{r["o_score"]:.0f}</b></td>'
         html += f'<td class="{"up" if r["a5"]>0 else "down"}">{r["a5"]*100:+.1f}%</td>'
-        html += f'<td>{f["pe"]}</td><td>{f["pb"]}</td><td>{f["mcap"]}</td></tr>'
+        html += f'<td>{f["pe"]}</td><td>{f["pb"]}</td>'
+        html += f'<td><b>{ey:.1f}%</b></td><td><span class="{"up" if va>1 else "down"}">{va:.1f}x</span></td>'
+        html += f'<td>{r["chip"]["label"]}</td><td>{r["sector"]}</td></tr>'
     html += '</table></div>'
 
 # === Qlib排名+详细 ===
 html += '<div class="card"><h2>📊 Qlib多因子 Top 12（稳定版，最大回撤-36%）</h2><table>'
-html += '<tr><th>#</th><th>名称</th><th>代码</th><th>现价</th><th>涨跌</th><th>得分</th><th>α5</th><th>α10</th><th>α20</th><th>量比</th><th>波动</th><th>PE</th><th>PB</th><th>市值</th></tr>'
+html += '<tr><th>#</th><th>名称</th><th>代码</th><th>价</th><th>分</th><th>α5</th><th>PE</th><th>PB</th><th>收益率</th><th>vs宝</th><th>β</th><th>筹码</th><th>板块</th></tr>'
 for idx, r in enumerate(qlib_rank):
     f = r['fin']; rc = 'r1' if idx<3 else ('r2' if idx<6 else 'r3')
+    ey = f['eps_yield']; va = f['vs_alipay']
     html += f'<tr><td><span class="rank {rc}">{idx+1}</span></td><td><b>{r["name"]}</b></td><td>{r["code"]}</td>'
-    html += f'<td>¥{r["price"]:.2f}</td><td class="{"up" if r["chg"]>0 else "down"}">{r["chg"]:+.1f}%</td>'
-    html += f'<td><b>{r["q_score"]:.0f}</b></td>'
+    html += f'<td>¥{r["price"]:.2f}</td><td><b>{r["q_score"]:.0f}</b></td>'
     html += f'<td class="{"up" if r["a5"]>0 else "down"}">{r["a5"]*100:+.1f}%</td>'
-    html += f'<td>{r["a10"]*100:+.1f}%</td><td>{r["a20"]*100:+.1f}%</td>'
-    html += f'<td>{r["vr"]:.1f}x</td><td>{r["vola"]:.1f}%</td>'
-    html += f'<td>{f["pe"]}</td><td>{f["pb"]}</td><td>{f["mcap"]}</td></tr>'
+    html += f'<td>{f["pe"]}</td><td>{f["pb"]}</td>'
+    html += f'<td><b>{ey:.1f}%</b></td><td><span class="{"up" if va>1 else "down"}">{va:.1f}x</span></td>'
+    html += f'<td>{r["beta"]:.1f}</td><td>{r["chip"]["label"]}</td><td>{r["sector"]}</td></tr>'
 html += '</table></div>'
 
 # === K线图 ===
