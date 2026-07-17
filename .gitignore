@@ -1,0 +1,7 @@
+*.json
+缓存/
+导出文件/
+__pycache__/
+.DS_Store
+*.pyc
+/tmp/
