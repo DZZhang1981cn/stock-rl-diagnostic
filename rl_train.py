@@ -249,7 +249,12 @@ def reinforce_step(code, prev_pred, actual_close, prev_close, lr=0.03):
 
 # ===== 主入口 =====
 if __name__ == '__main__':
+    CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'portfolio.json')
     STOCKS = {'600415':'小商品城','601212':'白银有色','600029':'南方航空'}
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE) as f:
+            config = json.load(f)
+            STOCKS = config.get('stocks', STOCKS)
     
     print("=" * 60)
     print("  RL 强化学习训练")

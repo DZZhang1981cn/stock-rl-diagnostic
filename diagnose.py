@@ -8,7 +8,13 @@ from datetime import datetime
 
 MODEL_FILE = os.path.expanduser('~/Desktop/AI工作/v3_model_weights.json')
 LOOKBACK = 20; WARMUP = 80
+# 持仓配置（从 portfolio.json 读取，不存在则用默认）
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'portfolio.json')
 STOCKS = {'600415':'小商品城','601212':'白银有色','600029':'南方航空'}
+if os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE) as f:
+        config = json.load(f)
+        STOCKS = config.get('stocks', STOCKS)
 
 def curl(url):
     r = subprocess.run(['curl', '-s', '-L', '--max-time', '30', '-H', 'User-Agent: Mozilla/5.0', url], capture_output=True, text=True, timeout=35)
