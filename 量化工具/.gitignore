@@ -1,0 +1,46 @@
+# ===== 依赖 / 虚拟环境 / 构建产物（绝不提交）=====
+**/node_modules/
+**/.venv/
+**/venv/
+**/__pycache__/
+*.pyc
+dist/
+build/
+
+# ===== 缓存 / 导出报告（含个人分析结果）=====
+缓存/
+导出文件/
+
+# ===== 真实持仓 / 交易 / 宏观数据（私人，绝不上传）=====
+分析/portfolio.json
+分析/持仓台账/*.csv
+分析/持仓台账/*.txt
+分析/持仓台账/*.json
+分析/宏观跟踪/*.csv
+
+# ===== 模型权重 / 训练产物 / 数据集（体积大且含个股数据）=====
+模型/rl_models/
+回测/Kronos/model/
+回测/Kronos/pretrained/
+回测/Kronos/outputs/
+回测/Kronos/finetune_csv/
+回测/Kronos/figures/
+回测/Kronos/examples/
+回测/TSP/data/
+回测/TSP/screenshots/
+回测/TSP/packaging/
+
+# ===== 数据 / 日志 / 图片文件 =====
+*.parquet
+*.log
+*.jpg
+*.png
+
+# ===== 第三方嵌套仓库（各自独立 git，不随本仓库分发）=====
+回测/Kronos/
+回测/TSP/
+
+# ===== 含真实持仓 / 持仓传导的私人分析文档 =====
+分析/持仓分析快照归档.md
+分析/宏观跟踪/event_exposure_matrix.md
+分析/宏观跟踪/地缘形势预判_20261015.md
